@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING, Optional
 
 import napari
 import numpy as np
+from magicgui import magicgui
 from qtpy.QtCore import Qt
 from qtpy.QtWidgets import (
     QGroupBox,
@@ -45,6 +46,9 @@ class QtSurfacePicker(QGroupBox):
         self.surforama.viewer.layers.events.removed.connect(
             self._on_layer_update
         )
+        self.surforama.viewer.layers.events.inserted.connect(
+            self._on_layer_update
+        )
 
         # initialize orientation data
         # todo store elsewhere (e.g., layer features)
@@ -59,6 +63,13 @@ class QtSurfacePicker(QGroupBox):
         self.enable_button = QPushButton(self.ENABLE_BUTTON_TEXT)
         self.enable_button.clicked.connect(self._on_enable_button_pressed)
 
+        # make a pointlayer selection dropdown
+        self.points_selection_dropdown = magicgui(
+            self._select_points_layer,
+            points_layer={"choices": self._get_valid_points_layers},
+            call_button="Select points layer",
+        )
+
         # make the rotation slider
         self.rotation_slider = QLabeledDoubleSlider(Qt.Orientation.Horizontal)
         self.rotation_slider.setMinimum(-180)
@@ -69,6 +80,7 @@ class QtSurfacePicker(QGroupBox):
         # make the layout
         self.setLayout(QVBoxLayout())
         self.layout().addWidget(self.enable_button)
+        self.layout().addWidget(self.points_selection_dropdown.native)
         self.layout().addWidget(self.rotation_slider)
 
     @property
@@ -105,8 +117,23 @@ class QtSurfacePicker(QGroupBox):
 
         self._enabled = enabled
 
+    def _select_points_layer(self, points_layer):
+        self.points_layer = points_layer
+        self.points_layer.selected_data.events.items_changed.connect(
+            self._on_point_selection
+        )
+        # self._on_points_update()
+
+    def _get_valid_points_layers(self, combo_box):
+        return [
+            layer
+            for layer in self.surforama.viewer.layers
+            if isinstance(layer, napari.layers.Points)
+        ]
+
     def _on_layer_update(self):
         # check if the stored layers are still around
+        self.points_selection_dropdown.reset_choices()
         viewer = self.surforama.viewer
         layer_deleted = False
         if (self.points_layer is not None) and (
